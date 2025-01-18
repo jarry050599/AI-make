@@ -62,3 +62,4 @@ if __name__ == "__main__":
     # Save map to an HTML file
     map_object.save("truffle_map.html")
     print("Map saved as 'truffle_map.html'. Open it in a browser to view.")
+    print("Done!")
