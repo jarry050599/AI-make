@@ -1,5 +1,4 @@
 import folium
-from microbit import 
 import time
 import json
 

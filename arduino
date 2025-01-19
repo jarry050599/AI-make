@@ -1,0 +1,39 @@
+#include <DHT.h>
+
+// 設定 DHT11 感測器腳位
+#define DHTPIN 2
+#define DHTTYPE DHT11
+DHT dht(DHTPIN, DHTTYPE);
+
+int lightPin = A0;  // 光照傳感器連接的腳位
+
+void setup() {
+  Serial.begin(9600);  // 開啟串口監控
+  dht.begin();  // 啟動 DHT 感測器
+}
+
+void loop() {
+  // 讀取溫濕度數據
+  float temperature = dht.readTemperature();
+  float humidity = dht.readHumidity();
+
+  // 讀取光照數據
+  int light = analogRead(lightPin);
+
+  // 確保讀取有效
+  if (isnan(temperature) || isnan(humidity)) {
+    Serial.println("Failed to read from DHT sensor!");
+    return;
+  }
+
+  // 將數據發送到串口
+  Serial.print("Temperature: ");
+  Serial.print(temperature);
+  Serial.print(" C, Humidity: ");
+  Serial.print(humidity);
+  Serial.print(" %, Light: ");
+  Serial.println(light);
+
+  // 延遲 2 秒後重複讀取
+  delay(2000);
+}
