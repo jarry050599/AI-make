@@ -84,6 +84,11 @@ def train_model():
 
         tokenized_datasets = dataset.map(tokenize_function, batched=True)
 
+        # 切割訓練和驗證集
+        split_dataset = tokenized_datasets.train_test_split(test_size=0.1)
+        train_dataset = split_dataset["train"]
+        eval_dataset = split_dataset["test"]
+
         training_args = TrainingArguments(
             output_dir="./output",
             evaluation_strategy="steps",
@@ -101,7 +106,8 @@ def train_model():
         trainer = Trainer(
             model=model,
             args=training_args,
-            train_dataset=tokenized_datasets,
+            train_dataset=train_dataset,
+            eval_dataset=eval_dataset,
             tokenizer=tokenizer
         )
 
