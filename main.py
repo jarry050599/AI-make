@@ -2,6 +2,8 @@ import tkinter as tk
 from tkinter import scrolledtext
 from transformers import AutoModelForCausalLM, AutoTokenizer
 import torch
+import re
+from datasets import load_dataset
 
 # 檢查 CUDA 是否可用
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
@@ -9,13 +11,32 @@ DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 # 模型與 Tokenizer 設定
 MODEL_NAME = "microsoft/DialoGPT-medium"
 
+# 清理文本函數
+def clean_text(text):
+    text = re.sub(r"<[^>]+>", "", text)  # 移除HTML標籤
+    text = re.sub(r"[^\u4e00-\u9fa5a-zA-Z0-9，。！？：；「」『』]", "", text)  # 保留中文、英文、數字
+    text = re.sub(r"\s+", " ", text)  # 移除多餘空白
+    return text.strip()
+
+# 載入與清理資料
+def prepare_dataset():
+    try:
+        dataset = load_dataset("text", data_files={"train": "train_data.txt"})
+        cleaned_data = [clean_text(line["text"]) for line in dataset["train"] if len(clean_text(line["text"])) > 10]
+        with open("cleaned_data.txt", "w", encoding="utf-8") as f:
+            f.write("\n".join(cleaned_data))
+        return True
+    except Exception as e:
+        response_text.insert(tk.END, f"資料處理失敗：{str(e)}\n")
+        return False
+
+# 載入模型
 def load_model():
     global model, tokenizer
     tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)
-    model = AutoModelForCausalLM.from_pretrained(
-        MODEL_NAME, device_map="auto"
-    )
+    model = AutoModelForCausalLM.from_pretrained(MODEL_NAME, device_map="auto").to(DEVICE)
 
+# 生成回應
 def generate_response():
     user_input = user_input_text.get("1.0", tk.END).strip()
     if not user_input:
@@ -33,7 +54,7 @@ def generate_response():
 # GUI 介面
 root = tk.Tk()
 root.title("簡單 LLM GUI")
-root.geometry("600x500")
+root.geometry("600x600")
 
 # 歡迎標題
 welcome_label = tk.Label(root, text="簡單 LLM 聊天機器人", font=("Arial", 16))
@@ -52,7 +73,15 @@ user_input_text.pack(padx=10, pady=5)
 generate_button = tk.Button(root, text="生成回應", command=generate_response)
 generate_button.pack(pady=5)
 
-# 載入模型
+# 資料清理按鈕
+def process_data():
+    if prepare_dataset():
+        response_text.insert(tk.END, "資料處理完成，已生成 cleaned_data.txt！\n")
+
+process_button = tk.Button(root, text="處理訓練資料", command=process_data)
+process_button.pack(pady=5)
+
+# 啟動應用
 def start_app():
     response_text.insert(tk.END, "正在載入模型，請稍候...\n")
     root.update()
