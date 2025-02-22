@@ -1,64 +1,67 @@
-import folium
-import time
-import json
+import tkinter as tk
+from tkinter import scrolledtext
+from transformers import AutoModelForCausalLM, AutoTokenizer
+import torch
 
-# 1. Initialize the map
-map_center = [23.5, 121.0]  # Taiwan's approximate coordinates
-map_zoom = 8
-map_object = folium.Map(location=map_center, zoom_start=map_zoom)
+# 檢查 CUDA 是否可用
+DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
-# 2. Micro:bit Data Collection
-def collect_data():
-    """
-    Collects random temperature and light levels for demonstration.
-    """
-    import random
-    data = []
-    for _ in range(5):  # Collect data 5 times as an example
-        temp_val = 20 + random.randint(0, 10)
-        light_val = random.randint(0, 100)
-        data.append({"temperature": temp_val, "light": light_val})
-        time.sleep(2)  # Wait 2 seconds before the next reading
-    return data
+# 模型與 Tokenizer 設定
+MODEL_NAME = "microsoft/DialoGPT-medium"
 
-# 3. Analyze data for truffle suitability
-def analyze_data(data):
-    """
-    Matches the data with known truffle conditions and returns suitable locations.
-    """
-    suitable_locations = []
-    for entry in data:
-        if 20 <= entry["temperature"] <= 25 and entry["light"] <= 50:
-            # Conditions for truffle growth based on provided documents
-            suitable_locations.append(entry)
-    return suitable_locations
+def load_model():
+    global model, tokenizer
+    tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)
+    model = AutoModelForCausalLM.from_pretrained(
+        MODEL_NAME, device_map="auto"
+    )
 
-# 4. Mark Truffle Locations on the Map
-def mark_locations(locations, map_obj):
-    """
-    Marks suitable truffle growth locations on a map.
-    """
-    for i, loc in enumerate(locations):
-        folium.Marker(
-            location=[map_center[0] + 0.01 * i, map_center[1] + 0.01 * i],
-            popup=f"Temperature: {loc['temperature']}°C, Light: {loc['light']}",
-            icon=folium.Icon(color="green")
-        ).add_to(map_obj)
+def generate_response():
+    user_input = user_input_text.get("1.0", tk.END).strip()
+    if not user_input:
+        return
 
-# Main Execution
-if __name__ == "__main__":
-    print("Collecting data from Micro:bit...")
-    collected_data = collect_data()
-    print("Data collected:", collected_data)
+    inputs = tokenizer(user_input, return_tensors="pt").to(DEVICE)
+    output = model.generate(
+        **inputs, max_new_tokens=200, do_sample=True, temperature=0.7
+    )
 
-    print("Analyzing data for truffle growth...")
-    suitable_locations = analyze_data(collected_data)
-    print("Suitable locations:", suitable_locations)
+    response = tokenizer.decode(output[0], skip_special_tokens=True)
+    response_text.insert(tk.END, f"你: {user_input}\nLLM: {response}\n{'-'*40}\n")
+    user_input_text.delete("1.0", tk.END)
 
-    print("Marking suitable locations on the map...")
-    mark_locations(suitable_locations, map_object)
+# GUI 介面
+root = tk.Tk()
+root.title("簡單 LLM GUI")
+root.geometry("600x500")
 
-    # Save map to an HTML file
-    map_object.save("truffle_map.html")
-    print("Map saved as 'truffle_map.html'. Open it in a browser to view.")
-    print("Done!")
+# 歡迎標題
+welcome_label = tk.Label(root, text="簡單 LLM 聊天機器人", font=("Arial", 16))
+welcome_label.pack(pady=10)
+
+# 對話輸出框
+response_text = scrolledtext.ScrolledText(root, wrap=tk.WORD, width=70, height=15)
+response_text.pack(padx=10, pady=10)
+response_text.insert(tk.END, "歡迎！輸入文字開始對話。\n\n")
+
+# 使用者輸入框
+user_input_text = tk.Text(root, height=3, width=70)
+user_input_text.pack(padx=10, pady=5)
+
+# 生成回應按鈕
+generate_button = tk.Button(root, text="生成回應", command=generate_response)
+generate_button.pack(pady=5)
+
+# 載入模型
+def start_app():
+    response_text.insert(tk.END, "正在載入模型，請稍候...\n")
+    root.update()
+    try:
+        load_model()
+        response_text.insert(tk.END, "模型載入完成！開始對話吧！\n\n")
+    except Exception as e:
+        response_text.insert(tk.END, f"模型載入失敗：{str(e)}\n\n")
+
+# 啟動應用
+start_app()
+root.mainloop()
