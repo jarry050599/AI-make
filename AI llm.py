@@ -59,3 +59,22 @@ def start_app():
 # 啟動應用
 start_app()
 root.mainloop()
+# 新增功能：清除對話框內容
+def clear_conversation():
+    response_text.delete("1.0", tk.END)
+
+# 新增功能：保存對話到檔案
+def save_conversation():
+    with open("conversation_log.txt", "w", encoding="utf-8") as f:
+        f.write(response_text.get("1.0", tk.END))
+    response_text.insert(tk.END, "\n對話已保存到 conversation_log.txt\n")
+
+# 新增按鈕框架
+button_frame = tk.Frame(root)
+button_frame.pack(pady=10)
+
+clear_button = tk.Button(button_frame, text="清除對話", command=clear_conversation)
+clear_button.pack(side=tk.LEFT, padx=5)
+
+save_button = tk.Button(button_frame, text="保存對話", command=save_conversation)
+save_button.pack(side=tk.LEFT, padx=5)
