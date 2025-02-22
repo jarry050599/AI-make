@@ -3,7 +3,10 @@ from tkinter import scrolledtext
 from transformers import AutoModelForCausalLM, AutoTokenizer
 import torch
 import re
+import os
 from datasets import load_dataset
+from fpdf import FPDF
+from docx import Document
 
 # 檢查 CUDA 是否可用
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
@@ -18,13 +21,48 @@ def clean_text(text):
     text = re.sub(r"\s+", " ", text)  # 移除多餘空白
     return text.strip()
 
+# 生成 PDF
+def save_as_pdf(cleaned_data):
+    pdf = FPDF()
+    pdf.add_page()
+    pdf.set_auto_page_break(auto=1, margin=15)
+    pdf.set_font("Arial", size=12)
+
+    for line in cleaned_data:
+        pdf.multi_cell(0, 10, line, align="L")
+
+    pdf.output("cleaned_data/cleaned_data.pdf")
+
+# 生成 Word
+def save_as_word(cleaned_data):
+    doc = Document()
+    doc.add_heading("清理後的資料", level=1)
+
+    for line in cleaned_data:
+        doc.add_paragraph(line)
+
+    doc.save("cleaned_data/cleaned_data.docx")
+
+# 生成 TXT
+def save_as_txt(cleaned_data):
+    with open("cleaned_data/cleaned_data.txt", "w", encoding="utf-8") as f:
+        f.write("\n".join(cleaned_data))
+
 # 載入與清理資料
 def prepare_dataset():
     try:
         dataset = load_dataset("text", data_files={"train": "train_data.txt"})
         cleaned_data = [clean_text(line["text"]) for line in dataset["train"] if len(clean_text(line["text"])) > 10]
-        with open("cleaned_data.txt", "w", encoding="utf-8") as f:
-            f.write("\n".join(cleaned_data))
+
+        # 建立輸出資料夾
+        if not os.path.exists("cleaned_data"):
+            os.makedirs("cleaned_data")
+
+        # 保存為多種格式
+        save_as_txt(cleaned_data)
+        save_as_pdf(cleaned_data)
+        save_as_word(cleaned_data)
+
         return True
     except Exception as e:
         response_text.insert(tk.END, f"資料處理失敗：{str(e)}\n")
@@ -76,7 +114,7 @@ generate_button.pack(pady=5)
 # 資料清理按鈕
 def process_data():
     if prepare_dataset():
-        response_text.insert(tk.END, "資料處理完成，已生成 cleaned_data.txt！\n")
+        response_text.insert(tk.END, "資料處理完成，已生成 cleaned_data 資料夾內的 PDF、WORD 和 TXT 檔案！\n")
 
 process_button = tk.Button(root, text="處理訓練資料", command=process_data)
 process_button.pack(pady=5)
