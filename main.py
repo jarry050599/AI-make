@@ -27,6 +27,12 @@ def load_training_data():
         response_text.insert(tk.END, "未找到 'train_data' 資料夾，請將資料放置在該資料夾內。\n")
         return cleaned_data
 
+    try:
+        from PyPDF2 import PdfReader
+    except ImportError:
+        os.system("pip install PyPDF2")
+        from PyPDF2 import PdfReader
+
     for filename in os.listdir("train_data"):
         file_path = os.path.join("train_data", filename)
         if filename.endswith(".txt"):
@@ -35,7 +41,6 @@ def load_training_data():
                 cleaned_data.extend([clean_text(line) for line in lines if len(clean_text(line)) > 10])
         elif filename.endswith(".pdf"):
             try:
-                from PyPDF2 import PdfReader
                 reader = PdfReader(file_path)
                 for page in reader.pages:
                     text = page.extract_text()
@@ -64,6 +69,7 @@ def train_model():
         dataset = Dataset.from_dict({"text": cleaned_data})
 
         tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)
+        tokenizer.pad_token = tokenizer.eos_token  # 設置 padding token
         model = AutoModelForCausalLM.from_pretrained(MODEL_NAME).to(DEVICE)
 
         def tokenize_function(examples):
@@ -102,6 +108,7 @@ def train_model():
 def load_model():
     global model, tokenizer
     tokenizer = AutoTokenizer.from_pretrained("./trained_model" if os.path.exists("./trained_model") else MODEL_NAME)
+    tokenizer.pad_token = tokenizer.eos_token
     model = AutoModelForCausalLM.from_pretrained("./trained_model" if os.path.exists("./trained_model") else MODEL_NAME).to(DEVICE)
 
 # 生成回應
@@ -110,7 +117,7 @@ def generate_response():
     if not user_input:
         return
 
-    inputs = tokenizer(user_input, return_tensors="pt").to(DEVICE)
+    inputs = tokenizer(user_input, return_tensors="pt", padding=True).to(DEVICE)
     output = model.generate(
         **inputs, max_new_tokens=200, do_sample=True, temperature=0.7
     )
@@ -161,4 +168,3 @@ def start_app():
 # 啟動應用
 start_app()
 root.mainloop()
-
