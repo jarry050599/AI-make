@@ -11,6 +11,19 @@ from docx import Document
 # 檢查 CUDA 是否可用
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
+# 安裝必要的套件
+try:
+    from PyPDF2 import PdfReader
+except ImportError:
+    os.system("pip install PyPDF2")
+    from PyPDF2 import PdfReader
+
+try:
+    from Cryptodome.Cipher import AES
+except ImportError:
+    os.system("pip install pycryptodome")
+    from Cryptodome.Cipher import AES
+
 # 模型與 Tokenizer 設定
 MODEL_NAME = "microsoft/DialoGPT-medium"
 
@@ -26,12 +39,6 @@ def load_training_data():
     if not os.path.exists("train_data"):
         response_text.insert(tk.END, "未找到 'train_data' 資料夾，請將資料放置在該資料夾內。\n")
         return cleaned_data
-
-    try:
-        from PyPDF2 import PdfReader
-    except ImportError:
-        os.system("pip install PyPDF2")
-        from PyPDF2 import PdfReader
 
     for filename in os.listdir("train_data"):
         file_path = os.path.join("train_data", filename)
@@ -79,11 +86,13 @@ def train_model():
 
         training_args = TrainingArguments(
             output_dir="./output",
-            evaluation_strategy="epoch",
+            evaluation_strategy="steps",
+            save_strategy="steps",
+            save_steps=500,
+            eval_steps=500,
             per_device_train_batch_size=2,
             per_device_eval_batch_size=2,
             num_train_epochs=3,
-            save_steps=500,
             logging_dir="./logs",
             logging_steps=10,
             load_best_model_at_end=True
