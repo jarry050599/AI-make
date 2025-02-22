@@ -8,9 +8,13 @@ MODEL_NAME = "mistralai/Mistral-7B-v0.1"
 
 def load_model():
     global model, tokenizer
-    tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)
+    import os
+    token = os.environ.get("HUGGINGFACE_TOKEN")
+    if token is None:
+        raise EnvironmentError("Please set the HUGGINGFACE_TOKEN environment variable with your Hugging Face token.")
+    tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME, token=token)
     model = AutoModelForCausalLM.from_pretrained(
-        MODEL_NAME, device_map="auto", load_in_4bit=True
+        MODEL_NAME, device_map="auto", load_in_4bit=True, token=token
     )
 
 def generate_response():
