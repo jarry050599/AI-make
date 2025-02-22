@@ -1,10 +1,10 @@
 import tkinter as tk
 from tkinter import scrolledtext
-from transformers import AutoModelForCausalLM, AutoTokenizer
+from transformers import AutoModelForCausalLM, AutoTokenizer, TrainingArguments, Trainer
 import torch
 import re
 import os
-from datasets import load_dataset
+from datasets import load_dataset, Dataset
 from fpdf import FPDF
 from docx import Document
 
@@ -14,65 +14,95 @@ DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 # 模型與 Tokenizer 設定
 MODEL_NAME = "microsoft/DialoGPT-medium"
 
-# 清理文本函數
 def clean_text(text):
     text = re.sub(r"<[^>]+>", "", text)  # 移除HTML標籤
     text = re.sub(r"[^\u4e00-\u9fa5a-zA-Z0-9，。！？：；「」『』]", "", text)  # 保留中文、英文、數字
     text = re.sub(r"\s+", " ", text)  # 移除多餘空白
     return text.strip()
 
-# 生成 PDF
-def save_as_pdf(cleaned_data):
-    pdf = FPDF()
-    pdf.add_page()
-    pdf.set_auto_page_break(auto=1, margin=15)
-    pdf.set_font("Arial", size=12)
+# 讀取並清理資料
+def load_training_data():
+    cleaned_data = []
+    if not os.path.exists("train_data"):
+        response_text.insert(tk.END, "未找到 'train_data' 資料夾，請將資料放置在該資料夾內。\n")
+        return cleaned_data
 
-    for line in cleaned_data:
-        pdf.multi_cell(0, 10, line, align="L")
+    for filename in os.listdir("train_data"):
+        file_path = os.path.join("train_data", filename)
+        if filename.endswith(".txt"):
+            with open(file_path, "r", encoding="utf-8") as f:
+                lines = f.readlines()
+                cleaned_data.extend([clean_text(line) for line in lines if len(clean_text(line)) > 10])
+        elif filename.endswith(".pdf"):
+            try:
+                from PyPDF2 import PdfReader
+                reader = PdfReader(file_path)
+                for page in reader.pages:
+                    text = page.extract_text()
+                    if text:
+                        cleaned_data.extend([clean_text(line) for line in text.split("\n") if len(clean_text(line)) > 10])
+            except Exception as e:
+                response_text.insert(tk.END, f"無法處理 PDF 檔案 {filename}：{str(e)}\n")
+        elif filename.endswith(".docx"):
+            try:
+                doc = Document(file_path)
+                for para in doc.paragraphs:
+                    cleaned_data.append(clean_text(para.text))
+            except Exception as e:
+                response_text.insert(tk.END, f"無法處理 DOCX 檔案 {filename}：{str(e)}\n")
 
-    pdf.output("cleaned_data/cleaned_data.pdf")
+    return cleaned_data
 
-# 生成 Word
-def save_as_word(cleaned_data):
-    doc = Document()
-    doc.add_heading("清理後的資料", level=1)
-
-    for line in cleaned_data:
-        doc.add_paragraph(line)
-
-    doc.save("cleaned_data/cleaned_data.docx")
-
-# 生成 TXT
-def save_as_txt(cleaned_data):
-    with open("cleaned_data/cleaned_data.txt", "w", encoding="utf-8") as f:
-        f.write("\n".join(cleaned_data))
-
-# 載入與清理資料
-def prepare_dataset():
+# 訓練模型
+def train_model():
     try:
-        dataset = load_dataset("text", data_files={"train": "train_data.txt"})
-        cleaned_data = [clean_text(line["text"]) for line in dataset["train"] if len(clean_text(line["text"])) > 10]
+        cleaned_data = load_training_data()
+        if not cleaned_data:
+            response_text.insert(tk.END, "未找到有效的訓練資料。\n")
+            return
 
-        # 建立輸出資料夾
-        if not os.path.exists("cleaned_data"):
-            os.makedirs("cleaned_data")
+        dataset = Dataset.from_dict({"text": cleaned_data})
 
-        # 保存為多種格式
-        save_as_txt(cleaned_data)
-        save_as_pdf(cleaned_data)
-        save_as_word(cleaned_data)
+        tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)
+        model = AutoModelForCausalLM.from_pretrained(MODEL_NAME).to(DEVICE)
 
-        return True
+        def tokenize_function(examples):
+            return tokenizer(examples["text"], padding="max_length", truncation=True, max_length=512)
+
+        tokenized_datasets = dataset.map(tokenize_function, batched=True)
+
+        training_args = TrainingArguments(
+            output_dir="./output",
+            evaluation_strategy="epoch",
+            per_device_train_batch_size=2,
+            per_device_eval_batch_size=2,
+            num_train_epochs=3,
+            save_steps=500,
+            logging_dir="./logs",
+            logging_steps=10,
+            load_best_model_at_end=True
+        )
+
+        trainer = Trainer(
+            model=model,
+            args=training_args,
+            train_dataset=tokenized_datasets,
+            tokenizer=tokenizer
+        )
+
+        response_text.insert(tk.END, "開始訓練模型...\n")
+        trainer.train()
+        model.save_pretrained("./trained_model")
+        tokenizer.save_pretrained("./trained_model")
+        response_text.insert(tk.END, "模型訓練完成，已保存至 './trained_model'。\n")
     except Exception as e:
-        response_text.insert(tk.END, f"資料處理失敗：{str(e)}\n")
-        return False
+        response_text.insert(tk.END, f"模型訓練失敗：{str(e)}\n")
 
 # 載入模型
 def load_model():
     global model, tokenizer
-    tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)
-    model = AutoModelForCausalLM.from_pretrained(MODEL_NAME, device_map="auto").to(DEVICE)
+    tokenizer = AutoTokenizer.from_pretrained("./trained_model" if os.path.exists("./trained_model") else MODEL_NAME)
+    model = AutoModelForCausalLM.from_pretrained("./trained_model" if os.path.exists("./trained_model") else MODEL_NAME).to(DEVICE)
 
 # 生成回應
 def generate_response():
@@ -111,13 +141,12 @@ user_input_text.pack(padx=10, pady=5)
 generate_button = tk.Button(root, text="生成回應", command=generate_response)
 generate_button.pack(pady=5)
 
-# 資料清理按鈕
-def process_data():
-    if prepare_dataset():
-        response_text.insert(tk.END, "資料處理完成，已生成 cleaned_data 資料夾內的 PDF、WORD 和 TXT 檔案！\n")
+# 訓練模型按鈕
+def train_data():
+    train_model()
 
-process_button = tk.Button(root, text="處理訓練資料", command=process_data)
-process_button.pack(pady=5)
+train_button = tk.Button(root, text="訓練模型", command=train_data)
+train_button.pack(pady=5)
 
 # 啟動應用
 def start_app():
@@ -132,3 +161,4 @@ def start_app():
 # 啟動應用
 start_app()
 root.mainloop()
+
