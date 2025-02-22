@@ -145,7 +145,7 @@ welcome_label = tk.Label(root, text="簡單 LLM 聊天機器人", font=("Arial",
 welcome_label.pack(pady=10)
 
 # 對話輸出框
-response_text = scrolledtext.Scrolledtext(root, wrap=tk.WORD, width=70, height=15)
+response_text = scrolledtext.ScrolledText(root, wrap=tk.WORD, width=70, height=15)
 response_text.pack(padx=10, pady=10)
 response_text.insert(tk.END, "歡迎！輸入文字開始對話。\n\n")
 
